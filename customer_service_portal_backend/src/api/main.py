@@ -1,8 +1,10 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.routing import APIRouter
+from fastapi.responses import JSONResponse
 
 from .routers import requests as requests_router_module
+from ..core.errors import DomainError, to_http_exception
 
 # Application metadata and OpenAPI configuration
 openapi_tags = [
@@ -46,6 +48,16 @@ def health_check():
         dict: A JSON payload with a 'message' key set to 'Healthy'.
     """
     return {"message": "Healthy"}
+
+
+# Domain error handler -> HTTPException mapping for a consistent payload
+@app.exception_handler(DomainError)
+async def domain_error_handler(_: Request, exc: DomainError):
+    http_exc = to_http_exception(exc)
+    return JSONResponse(
+        status_code=http_exc.status_code or 500,
+        content={"detail": http_exc.detail if http_exc.detail else "Error"},
+    )
 
 
 # Create an APIRouter for future app-level routes if needed

@@ -1,57 +1,70 @@
 from typing import Optional
 
-from fastapi import APIRouter, Path, Query
+from fastapi import APIRouter, Path, Query, status, Depends
 
 from ...core.schemas import (
     ServiceRequestCreate,
     StatusUpdateCreate,
-    ServiceRequestResponse,
+    ServiceRequestOut,
     ServiceRequestListResponse,
     ServiceRequestHistoryResponse,
+    StatusEnum,
 )
+from ...core.errors import DomainError, to_http_exception
+from ...core.repository import InMemoryRepository
+from ...core.services import RequestService
 
 router = APIRouter()
+
+
+def get_service() -> RequestService:
+    """
+    Dependency provider for RequestService.
+    Uses a module-level singleton repository to persist data during process lifetime.
+    """
+    # Singleton in-memory repo for the app process
+    global _repo_singleton
+    try:
+        _repo_singleton  # type: ignore[name-defined]
+    except NameError:
+        _repo_singleton = InMemoryRepository()  # type: ignore[assignment]
+    return RequestService(_repo_singleton)  # type: ignore[name-defined]
 
 
 # PUBLIC_INTERFACE
 @router.post(
     "",
-    response_model=ServiceRequestResponse,
+    response_model=ServiceRequestOut,
+    status_code=status.HTTP_201_CREATED,
     summary="Create a new service request",
-    description=(
-        "Create a new customer service request. This endpoint accepts minimal "
-        "request details and returns a placeholder response until full implementation."
-    ),
+    description="Create a new customer service request.",
     responses={
         201: {"description": "Service request created"},
         400: {"description": "Validation error"},
     },
 )
-async def create_request(payload: ServiceRequestCreate) -> ServiceRequestResponse:
+async def create_request(
+    payload: ServiceRequestCreate, svc: RequestService = Depends(get_service)
+) -> ServiceRequestOut:
     """
     Create a service request.
-
-    This is a scaffolding endpoint; business logic and persistence are not implemented yet.
 
     Args:
         payload (ServiceRequestCreate): The payload containing request details.
 
     Returns:
-        ServiceRequestResponse: Placeholder response model.
-
-    TODO:
-        - Validate business rules
-        - Persist to database
-        - Emit domain event(s)
+        ServiceRequestOut: The created request.
     """
-    # Placeholder: raise to indicate not implemented in Step 1
-    raise NotImplementedError("Create request is not implemented yet.")
+    try:
+        return svc.create(payload)
+    except DomainError as e:
+        raise to_http_exception(e) from e
 
 
 # PUBLIC_INTERFACE
 @router.get(
     "/{id}",
-    response_model=ServiceRequestResponse,
+    response_model=ServiceRequestOut,
     summary="Get a service request by ID",
     description="Retrieve a single service request by its identifier.",
     responses={
@@ -61,27 +74,21 @@ async def create_request(payload: ServiceRequestCreate) -> ServiceRequestRespons
 )
 async def get_request(
     id: str = Path(..., description="The unique identifier of the service request"),
-) -> ServiceRequestResponse:
+    svc: RequestService = Depends(get_service),
+) -> ServiceRequestOut:
     """
     Retrieve a service request by ID.
-
-    Args:
-        id (str): The request identifier.
-
-    Returns:
-        ServiceRequestResponse: Placeholder response model.
-
-    TODO:
-        - Fetch from datastore
-        - Map persistence model to API schema
     """
-    raise NotImplementedError("Get request by ID is not implemented yet.")
+    try:
+        return svc.get(id)
+    except DomainError as e:
+        raise to_http_exception(e) from e
 
 
 # PUBLIC_INTERFACE
 @router.patch(
     "/{id}/status",
-    response_model=ServiceRequestResponse,
+    response_model=ServiceRequestOut,
     summary="Update the status of a service request",
     description="Update the status of an existing service request and return the updated entity.",
     responses={
@@ -93,22 +100,15 @@ async def get_request(
 async def update_request_status(
     payload: StatusUpdateCreate,
     id: str = Path(..., description="The unique identifier of the service request"),
-) -> ServiceRequestResponse:
+    svc: RequestService = Depends(get_service),
+) -> ServiceRequestOut:
     """
     Update a service request's status.
-
-    Args:
-        id (str): The request identifier.
-        payload (StatusUpdateCreate): The status update details.
-
-    Returns:
-        ServiceRequestResponse: Placeholder updated entity.
-
-    TODO:
-        - Validate transition rules
-        - Persist status change and history entry
     """
-    raise NotImplementedError("Update request status is not implemented yet.")
+    try:
+        return svc.update_status(id, payload.status, payload.note)
+    except DomainError as e:
+        raise to_http_exception(e) from e
 
 
 # PUBLIC_INTERFACE
@@ -117,40 +117,29 @@ async def update_request_status(
     response_model=ServiceRequestListResponse,
     summary="List service requests",
     description=(
-        "List service requests with simple filtering and pagination placeholders. "
-        "Filtering/pagination will be implemented in a subsequent step."
+        "List service requests with optional filtering and pagination."
     ),
     responses={
         200: {"description": "List of service requests"},
     },
 )
 async def list_requests(
-    status: Optional[str] = Query(
-        None, description="Optional status filter (placeholder)"
-    ),
-    q: Optional[str] = Query(
-        None, description="Optional free-text search (placeholder)"
-    ),
-    page: int = Query(1, ge=1, description="Page number (placeholder)"),
-    page_size: int = Query(20, ge=1, le=100, description="Page size (placeholder)"),
+    status: Optional[StatusEnum] = Query(None, description="Optional status filter"),
+    q: Optional[str] = Query(None, description="Optional free-text search"),
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(20, ge=1, le=100, description="Page size"),
+    svc: RequestService = Depends(get_service),
 ) -> ServiceRequestListResponse:
     """
-    List service requests.
-
-    Args:
-        status (Optional[str]): Filter by status (placeholder).
-        q (Optional[str]): Free-text search (placeholder).
-        page (int): Page number (placeholder).
-        page_size (int): Page size (placeholder).
-
-    Returns:
-        ServiceRequestListResponse: Placeholder collection response.
-
-    TODO:
-        - Implement filtering, sorting, pagination
-        - Integrate with datastore
+    List service requests with filters and pagination.
     """
-    raise NotImplementedError("List requests is not implemented yet.")
+    try:
+        items, total = svc.list(status=status, q=q, page=page, page_size=page_size)
+        return ServiceRequestListResponse(
+            items=items, total=total, page=page, page_size=page_size
+        )
+    except DomainError as e:
+        raise to_http_exception(e) from e
 
 
 # PUBLIC_INTERFACE
@@ -166,18 +155,12 @@ async def list_requests(
 )
 async def get_request_history(
     id: str = Path(..., description="The unique identifier of the service request"),
+    svc: RequestService = Depends(get_service),
 ) -> ServiceRequestHistoryResponse:
     """
     Get a service request's history.
-
-    Args:
-        id (str): The request identifier.
-
-    Returns:
-        ServiceRequestHistoryResponse: Placeholder history response model.
-
-    TODO:
-        - Retrieve and order history events
-        - Consider pagination for long histories
     """
-    raise NotImplementedError("Get request history is not implemented yet.")
+    try:
+        return svc.history(id)
+    except DomainError as e:
+        raise to_http_exception(e) from e
