@@ -10,6 +10,8 @@ from ...core.schemas import (
     ServiceRequestListResponse,
     ServiceRequestHistoryResponse,
     StatusEnum,
+    ListRequestFilters,
+    ErrorResponse,
 )
 from ...core.errors import DomainError, to_http_exception
 from ...core.repository import InMemoryRepository
@@ -45,7 +47,11 @@ def get_service() -> RequestService:
             "description": "Service request created",
             "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ServiceRequestOut"}}},
         },
-        400: {"description": "Validation error"},
+        422: {
+            "description": "Validation error",
+            "model": ErrorResponse,
+        },
+        500: {"description": "Internal error", "model": ErrorResponse},
     },
 )
 async def create_request(
@@ -78,7 +84,8 @@ async def create_request(
             "description": "Service request found",
             "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ServiceRequestOut"}}},
         },
-        404: {"description": "Service request not found"},
+        404: {"description": "Service request not found", "model": ErrorResponse},
+        500: {"description": "Internal error", "model": ErrorResponse},
     },
 )
 async def get_request(
@@ -106,8 +113,10 @@ async def get_request(
             "description": "Status updated",
             "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ServiceRequestOut"}}},
         },
-        400: {"description": "Invalid status transition"},
-        404: {"description": "Service request not found"},
+        404: {"description": "Service request not found", "model": ErrorResponse},
+        409: {"description": "Invalid status transition", "model": ErrorResponse},
+        422: {"description": "Validation error", "model": ErrorResponse},
+        500: {"description": "Internal error", "model": ErrorResponse},
     },
 )
 async def update_request_status(
@@ -139,6 +148,8 @@ async def update_request_status(
             "description": "List of service requests",
             "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ServiceRequestListResponse"}}},
         },
+        422: {"description": "Validation error", "model": ErrorResponse},
+        500: {"description": "Internal error", "model": ErrorResponse},
     },
 )
 async def list_requests(
@@ -165,27 +176,27 @@ async def list_requests(
     Returns:
         ServiceRequestListResponse: Items and pagination metadata.
     """
-    # Input validation: ensure created_to not before created_from
-    if created_from and created_to and created_to < created_from:
-        # Consistent with FastAPI validation error shape for clarity
-        from fastapi import HTTPException
-        raise HTTPException(status_code=422, detail="created_to must be on or after created_from")
+    # Delegate validation to Pydantic model so OpenAPI reflects constraints
+    filters = ListRequestFilters(
+        status=status,
+        q=q,
+        customer_id=customer_id,
+        created_from=created_from,
+        created_to=created_to,
+        page=page,
+        page_size=page_size,
+    )
 
-    try:
-        items, total = svc.list(
-            status=status,
-            q=q,
-            page=page,
-            page_size=page_size,
-            customer_id=customer_id,
-            created_from=created_from,
-            created_to=created_to,
-        )
-        return ServiceRequestListResponse(
-            items=items, total=total, page=page, page_size=page_size
-        )
-    except DomainError as e:
-        raise to_http_exception(e) from e
+    items, total = svc.list(
+        status=filters.status,
+        q=filters.q,
+        page=filters.page,
+        page_size=filters.page_size,
+        customer_id=filters.customer_id,
+        created_from=filters.created_from,
+        created_to=filters.created_to,
+    )
+    return ServiceRequestListResponse(items=items, total=total, page=filters.page, page_size=filters.page_size)
 
 
 # PUBLIC_INTERFACE
@@ -200,7 +211,8 @@ async def list_requests(
             "description": "History retrieved",
             "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ServiceRequestHistoryResponse"}}},
         },
-        404: {"description": "Service request not found"},
+        404: {"description": "Service request not found", "model": ErrorResponse},
+        500: {"description": "Internal error", "model": ErrorResponse},
     },
 )
 async def get_request_history(

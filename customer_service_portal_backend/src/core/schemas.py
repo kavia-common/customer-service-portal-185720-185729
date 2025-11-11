@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime, date
 from enum import Enum
-from typing import List, Optional
-from pydantic import BaseModel, Field, field_validator
+from typing import List, Optional, Annotated
+from pydantic import BaseModel, Field, field_validator, constr
 
 
 # PUBLIC_INTERFACE
@@ -13,6 +13,20 @@ class StatusEnum(str, Enum):
     in_progress = "in_progress"
     resolved = "resolved"
     closed = "closed"
+
+
+# PUBLIC_INTERFACE
+class ErrorInfo(BaseModel):
+    """Standard error info object carried in ErrorResponse."""
+    code: str = Field(..., description="Stable string error identifier")
+    message: str = Field(..., description="Human-readable error message")
+    details: dict = Field(default_factory=dict, description="Optional structured details")
+
+
+# PUBLIC_INTERFACE
+class ErrorResponse(BaseModel):
+    """Consistent JSON error envelope returned by the API."""
+    error: ErrorInfo = Field(..., description="Error metadata")
 
 
 # PUBLIC_INTERFACE
@@ -29,9 +43,14 @@ class ServiceRequestCreate(BaseModel):
 
     Minimal fields for initial support; extend later with requester, priority, etc.
     """
-    title: str = Field(..., min_length=1, description="Short title for the service request")
-    description: Optional[str] = Field(
-        None, description="Detailed description of the service request"
+    title: constr(min_length=3, max_length=120) = Field(
+        ..., description="Short title for the service request (3-120 chars)"
+    )
+    description: Optional[constr(min_length=1, max_length=5000)] = Field(
+        None, description="Detailed description of the service request (1-5000 chars if provided)"
+    )
+    customer_id: Optional[Annotated[str, Field(pattern=r"^[A-Za-z0-9_-]{3,64}$")]] = Field(
+        None, description="Optional customer identifier (3-64, A-Za-z0-9_-)"
     )
 
 
@@ -41,9 +60,12 @@ class StatusUpdateCreate(BaseModel):
     Payload to update the status of an existing service request.
 
     Uses a strict enum for valid statuses and optional note.
+    Additional business rule validations enforced at service layer.
     """
     status: StatusEnum = Field(..., description="New status for the service request")
-    note: Optional[str] = Field(None, description="Optional note explaining the status change")
+    note: Optional[constr(min_length=1, max_length=2000)] = Field(
+        None, description="Optional note explaining the status change (1-2000 chars if provided)"
+    )
 
 
 # PUBLIC_INTERFACE
@@ -70,9 +92,18 @@ class ServiceRequestOut(BaseModel):
 
 
 # PUBLIC_INTERFACE
-class ServiceRequestListItem(ServiceRequestOut):
+class ServiceRequestListItem(BaseModel):
     """List item representation of a service request."""
-    pass
+    id: str = Field(..., description="Unique identifier of the service request")
+    title: str = Field(..., description="Short title")
+    description: Optional[str] = Field(None, description="Detailed description")
+    status: StatusEnum = Field(..., description="Current status of the request")
+    created_at: datetime = Field(..., description="Creation timestamp")
+    updated_at: datetime = Field(..., description="Last update timestamp")
+    customer_id: Optional[str] = Field(
+        None,
+        description="Customer identifier associated with the request (optional for in-memory demo)",
+    )
 
 
 # PUBLIC_INTERFACE
@@ -99,8 +130,12 @@ class ListRequestFilters(BaseModel):
     - Sorting: fixed created_at desc ordering (implicit).
     """
     status: Optional[StatusEnum] = Field(None, description="Filter by status")
-    q: Optional[str] = Field(None, description="Free-text search in title/description")
-    customer_id: Optional[str] = Field(None, description="Filter by customer id")
+    q: Optional[constr(min_length=1, max_length=256)] = Field(
+        None, description="Free-text search in title/description (1-256 chars if provided)"
+    )
+    customer_id: Optional[Annotated[str, Field(pattern=r"^[A-Za-z0-9_-]{3,64}$")]] = Field(
+        None, description="Filter by customer id (3-64, A-Za-z0-9_-)"
+    )
     created_from: Optional[date] = Field(
         None,
         description="Filter records created on/after this date (inclusive, UTC)",

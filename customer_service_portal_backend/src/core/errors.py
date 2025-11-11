@@ -19,6 +19,11 @@ class InvalidTransitionError(DomainError):
 
 
 # PUBLIC_INTERFACE
+class RepositoryError(DomainError):
+    """Raised when repository/persistence operations fail."""
+
+
+# PUBLIC_INTERFACE
 def to_http_exception(err: DomainError) -> HTTPException:
     """
     Map domain errors to HTTPException suitable for FastAPI responses.
@@ -26,5 +31,8 @@ def to_http_exception(err: DomainError) -> HTTPException:
     if isinstance(err, NotFoundError):
         return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(err))
     if isinstance(err, InvalidTransitionError):
-        return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(err))
+        # Map to 409 Conflict per requirement "invalid_transition"
+        return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(err))
+    if isinstance(err, RepositoryError):
+        return HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(err))
     return HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal error")

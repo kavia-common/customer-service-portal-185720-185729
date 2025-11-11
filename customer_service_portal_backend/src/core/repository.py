@@ -87,7 +87,7 @@ class InMemoryRepository(Repository):
                 status=StatusEnum.new,
                 created_at=now,
                 updated_at=now,
-                customer_id=None,
+                customer_id=payload.customer_id,
                 history=[StatusUpdateOut(status=StatusEnum.new, note=None, at=now)],
             )
             self._store[request_id] = entity

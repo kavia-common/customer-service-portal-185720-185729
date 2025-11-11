@@ -82,6 +82,10 @@ class RequestService:
         - in_progress -> resolved | closed
         - resolved -> in_progress (reopen)
         - closed -> in_progress (reopen)
+
+        Additional rules:
+        - When transitioning to 'closed' or reopening from 'resolved'/'closed' to 'in_progress',
+          a non-empty note is required.
         """
         existing = self.repo.get_request(request_id)
         if not existing:
@@ -91,6 +95,16 @@ class RequestService:
             raise InvalidTransitionError(
                 f"Invalid status transition: {existing.status} -> {new_status}"
             )
+
+        # Enforce note requirement for specific transitions
+        if new_status == StatusEnum.closed and (note is None or not note.strip()):
+            raise InvalidTransitionError("Closing a request requires a non-empty note")
+        if (
+            existing.status in (StatusEnum.resolved, StatusEnum.closed)
+            and new_status == StatusEnum.in_progress
+            and (note is None or not note.strip())
+        ):
+            raise InvalidTransitionError("Reopening a request requires a non-empty note")
 
         updated = self.repo.update_status(request_id, new_status, note)
         # repo.update_status returns None only if not found (we already checked)

@@ -52,6 +52,9 @@ Allowed transitions are enforced by business logic:
 - closed -> in_progress (reopen)
 - Idempotent updates are allowed (setting the same status again).
 
+Additional rules:
+- When closing a request (… -> closed) or reopening (resolved/closed -> in_progress), a non-empty note is required.
+
 ## Endpoints overview
 
 Health and docs:
@@ -77,9 +80,9 @@ For precise request/response schemas and examples, refer to the live OpenAPI at 
 ## Request and response models (summary)
 
 - ServiceRequestCreate
-  - title (string, required), description (string, optional)
+  - title (string, required; 3-120), description (string 1-5000 if provided), customer_id (optional; ^[A-Za-z0-9_-]{3,64}$)
 - StatusUpdateCreate
-  - status (enum: new | in_progress | resolved | closed, required), note (string, optional)
+  - status (enum: new | in_progress | resolved | closed, required), note (string 1-2000 if provided; required when closing/reopening)
 - ServiceRequestOut / ServiceRequestListItem
   - id, title, description, status, created_at, updated_at, customer_id (optional)
 - ServiceRequestListResponse
@@ -87,73 +90,35 @@ For precise request/response schemas and examples, refer to the live OpenAPI at 
 - ServiceRequestHistoryResponse
   - id, history (list of { status, note, at })
 
-## Sample cURL requests
-
-Health:
-```bash
-curl -s http://localhost:3001/
-```
-
-Create a request:
-```bash
-curl -s -X POST "http://localhost:3001/requests" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "title": "Printer issue",
-    "description": "Paper jam on floor 2"
-  }'
-```
-
-Get a request by ID:
-```bash
-REQ_ID="replace-with-id"
-curl -s "http://localhost:3001/requests/${REQ_ID}"
-```
-
-Update status (new -> in_progress):
-```bash
-REQ_ID="replace-with-id"
-curl -s -X PATCH "http://localhost:3001/requests/${REQ_ID}/status" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "status": "in_progress",
-    "note": "Work started"
-  }'
-```
-
-List requests (filters and pagination):
-```bash
-# All requests (default page=1, page_size=20)
-curl -s "http://localhost:3001/requests"
-
-# Search by text (title/description)
-curl -s "http://localhost:3001/requests?q=printer"
-
-# Filter by status
-curl -s "http://localhost:3001/requests?status=in_progress"
-
-# Date range (inclusive), format YYYY-MM-DD
-curl -s "http://localhost:3001/requests?created_from=2025-01-01&created_to=2025-12-31"
-
-# Pagination
-curl -s "http://localhost:3001/requests?page=2&page_size=10"
-```
-
-Get status history:
-```bash
-REQ_ID="replace-with-id"
-curl -s "http://localhost:3001/requests/${REQ_ID}/history"
-```
-
 ## Validation, filters, and pagination
 
 - Pagination uses page (>=1) and page_size (1..100).
 - Filters:
   - status: One of new, in_progress, resolved, closed.
-  - q: Free-text search in title and description.
-  - customer_id: Optional field supported by the repository abstraction.
+  - q: Free-text search in title and description (1-256 chars if provided).
+  - customer_id: Optional, pattern ^[A-Za-z0-9_-]{3,64}$.
   - created_from / created_to: Date-only (YYYY-MM-DD), inclusive. If created_to is earlier than created_from, a 422 validation error is returned.
 - Results are ordered by created_at descending.
+
+## Standardized error responses
+
+All errors follow a consistent JSON envelope:
+```json
+{
+  "error": {
+    "code": "string_identifier",
+    "message": "Human-readable message",
+    "details": {}
+  }
+}
+```
+
+Common codes:
+- validation_error (422)
+- not_found (404)
+- invalid_transition (409)
+- repository_error (500)
+- internal_error (500)
 
 ## Persistence and repository abstraction
 
