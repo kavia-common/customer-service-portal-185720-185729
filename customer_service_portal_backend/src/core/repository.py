@@ -159,7 +159,8 @@ class InMemoryRepository(Repository):
             end = start + page_size
             page_slice = items[start:end]
 
-            return [self._to_out(e) for e in page_slice], total
+            # Map to list item representation for the list endpoint
+            return [self._to_list_item(e) for e in page_slice], total
 
     def get_history(self, request_id: str) -> Optional[List[StatusUpdateOut]]:
         with self._lock:
@@ -172,6 +173,23 @@ class InMemoryRepository(Repository):
     @staticmethod
     def _to_out(entity: _ServiceRequestEntity) -> ServiceRequestOut:
         return ServiceRequestOut(
+            id=entity.id,
+            title=entity.title,
+            description=entity.description,
+            status=entity.status,
+            created_at=entity.created_at,
+            updated_at=entity.updated_at,
+            customer_id=entity.customer_id,
+        )
+
+    @staticmethod
+    def _to_list_item(entity: _ServiceRequestEntity) -> ServiceRequestListItem:
+        """
+        Convert internal entity to a ServiceRequestListItem.
+        Currently mirrors _to_out, but kept separate to allow future divergence
+        between detail and list views without affecting other code paths.
+        """
+        return ServiceRequestListItem(
             id=entity.id,
             title=entity.title,
             description=entity.description,
