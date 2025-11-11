@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Depends, Path, Query, status
+from fastapi import APIRouter, Depends, Path, Query, status, Response
 
 from ..core.dependencies import get_repo
 from ..core.auth import get_principal, require_customer, require_staff, Principal
@@ -223,7 +223,7 @@ def delete_request(
     request_id: int = Path(..., ge=1, description="Service request ID"),
     repo: Repository = Depends(get_repo),
     principal: Principal | None = Depends(get_principal),
-) -> None:
+) -> Response:
     """
     Delete a service request.
 
@@ -246,4 +246,5 @@ def delete_request(
         from ..core.errors import NotFoundError
 
         raise NotFoundError(f"Service request {request_id} not found", code="REQUEST_NOT_FOUND")
-    return None
+    # Return explicit empty response for 204 No Content
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
