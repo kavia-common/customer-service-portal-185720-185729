@@ -3,6 +3,7 @@ from datetime import date
 
 from fastapi import APIRouter, Path, Query, status, Depends, UploadFile, File
 from fastapi.responses import FileResponse, JSONResponse
+from ...api.security import require_bearer_token
 
 from ...core.schemas import (
     ServiceRequestCreate,
@@ -64,6 +65,8 @@ def get_attachment_store() -> AttachmentStore:
             "description": "Service request created",
             "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ServiceRequestOut"}}},
         },
+        401: {"description": "Unauthorized", "model": ErrorResponse},
+        403: {"description": "Forbidden", "model": ErrorResponse},
         422: {
             "description": "Validation error",
             "model": ErrorResponse,
@@ -72,7 +75,9 @@ def get_attachment_store() -> AttachmentStore:
     },
 )
 async def create_request(
-    payload: ServiceRequestCreate, svc: RequestService = Depends(get_service)
+    payload: ServiceRequestCreate,
+    svc: RequestService = Depends(get_service),
+    _auth_ok=Depends(require_bearer_token),
 ) -> ServiceRequestOut:
     """
     Create a service request.
@@ -130,6 +135,8 @@ async def get_request(
             "description": "Status updated",
             "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ServiceRequestOut"}}},
         },
+        401: {"description": "Unauthorized", "model": ErrorResponse},
+        403: {"description": "Forbidden", "model": ErrorResponse},
         404: {"description": "Service request not found", "model": ErrorResponse},
         409: {"description": "Invalid status transition", "model": ErrorResponse},
         422: {"description": "Validation error", "model": ErrorResponse},
@@ -140,6 +147,7 @@ async def update_request_status(
     payload: StatusUpdateCreate,
     id: str = Path(..., description="The unique identifier of the service request"),
     svc: RequestService = Depends(get_service),
+    _auth_ok=Depends(require_bearer_token),
 ) -> ServiceRequestOut:
     """
     Update a service request's status.
@@ -264,6 +272,8 @@ async def get_request_history(
     responses={
         201: {"description": "Attachment uploaded"},
         400: {"description": "Validation error", "model": ErrorResponse},
+        401: {"description": "Unauthorized", "model": ErrorResponse},
+        403: {"description": "Forbidden", "model": ErrorResponse},
         404: {"description": "Service request not found", "model": ErrorResponse},
         415: {"description": "Unsupported media type", "model": ErrorResponse},
         413: {"description": "Payload too large", "model": ErrorResponse},
@@ -275,6 +285,7 @@ async def upload_attachment(
     file: UploadFile = File(..., description="File to upload"),
     svc: RequestService = Depends(get_service),
     store: AttachmentStore = Depends(get_attachment_store),
+    _auth_ok=Depends(require_bearer_token),
 ) -> AttachmentUploadResponse:
     """
     Upload an attachment for a given service request.

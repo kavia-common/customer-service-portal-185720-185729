@@ -66,16 +66,19 @@ Health and docs:
 Requests:
 - POST /requests
   - Create a new service request (initial status = "new").
+  - Requires Authorization: Bearer <CSP_API_TOKEN> (falls back to dev token if not set).
 - GET /requests/{id}
   - Retrieve a service request by ID.
 - PATCH /requests/{id}/status
   - Update the status of a service request (enforces workflow).
+  - Requires Authorization: Bearer <CSP_API_TOKEN> (falls back to dev token if not set).
 - GET /requests
   - List service requests with optional filters (status, q, customer_id, created_from, created_to) and pagination (page, page_size).
 - GET /requests/{id}/history
   - Retrieve the chronological status update history for a request.
 - POST /requests/{id}/attachments
   - Multipart upload (field "file"). Stores file on disk under ./attachments/{id}/ with in-memory metadata.
+  - Requires Authorization: Bearer <CSP_API_TOKEN> (falls back to dev token if not set).
 - GET /requests/{id}/attachments
   - List attachment metadata for a request.
 - GET /requests/{id}/attachments/{attachment_id}
@@ -131,6 +134,13 @@ Common codes:
 - This implementation uses an in-memory, process-local, thread-safe repository (RLock) for simplicity and speed during development and testing.
 - The business logic (RequestService) depends on an abstract Repository interface defined in src/core/repository.py. This allows swapping the in-memory repository with a database-backed implementation in the future (e.g., SQL or NoSQL) without changing route handlers or service logic.
 - Tests override the RequestService dependency to ensure test isolation with a fresh repository per test.
+
+## Authentication
+
+Write operations require a static Bearer token.
+- Set environment variable CSP_API_TOKEN to your desired token value before starting the server.
+- If not set, a development fallback token 'dev-token-CHANGE-ME' is accepted.
+- Send header: Authorization: Bearer <token>
 
 ## Development notes
 

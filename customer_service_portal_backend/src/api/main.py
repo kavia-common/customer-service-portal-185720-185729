@@ -27,6 +27,8 @@ openapi_tags = [
     },
 ]
 
+from fastapi.openapi.utils import get_openapi
+
 app = FastAPI(
     title="Customer Service Portal API",
     description=(
@@ -36,6 +38,30 @@ app = FastAPI(
     version="0.1.0",
     openapi_tags=openapi_tags,
 )
+
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+    openapi_schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description=app.description,
+        routes=app.routes,
+        tags=openapi_tags,
+    )
+    # Inject HTTP bearer security scheme
+    components = openapi_schema.setdefault("components", {})
+    security_schemes = components.setdefault("securitySchemes", {})
+    security_schemes["BearerAuth"] = {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Static bearer token. Provide 'Authorization: Bearer <CSP_API_TOKEN>'.",
+    }
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+app.openapi = custom_openapi  # type: ignore[assignment]
 
 # CORS configuration (kept permissive for scaffolding; tighten later as needed)
 app.add_middleware(

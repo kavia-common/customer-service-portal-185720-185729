@@ -9,7 +9,7 @@ def create_request(client: TestClient, title: str, description: str | None = Non
     payload = {"title": title}
     if description is not None:
         payload["description"] = description
-    resp = client.post("/requests", json=payload)
+    resp = client.post("/requests", json=payload, headers={"Authorization": "Bearer dev-token-CHANGE-ME"})
     assert resp.status_code == 201, resp.text
     data = resp.json()
     # sanity checks on basic shape
@@ -90,7 +90,11 @@ def test_list_requests_supports_filters_pagination_and_desc_order(client: TestCl
     assert q_body["items"][0]["id"] == r2["id"]
 
     # Status filter: update one to in_progress, list only in_progress
-    _ = client.patch(f"/requests/{r2['id']}/status", json={"status": "in_progress"})
+    _ = client.patch(
+        f"/requests/{r2['id']}/status",
+        json={"status": "in_progress"},
+        headers={"Authorization": "Bearer dev-token-CHANGE-ME"},
+    )
     resp_status = client.get("/requests", params={"status": "in_progress"})
     assert resp_status.status_code == 200
     status_body = resp_status.json()
@@ -116,23 +120,39 @@ def test_update_status_valid_transitions_and_history_recording(client: TestClien
     req_id = created["id"]
 
     # new -> in_progress
-    resp1 = client.patch(f"/requests/{req_id}/status", json={"status": "in_progress", "note": "Started work"})
+    resp1 = client.patch(
+        f"/requests/{req_id}/status",
+        json={"status": "in_progress", "note": "Started work"},
+        headers={"Authorization": "Bearer dev-token-CHANGE-ME"},
+    )
     assert resp1.status_code == 200
     body1 = resp1.json()
     assert body1["status"] == "in_progress"
 
     # in_progress -> resolved
-    resp2 = client.patch(f"/requests/{req_id}/status", json={"status": "resolved", "note": "Fixed"})
+    resp2 = client.patch(
+        f"/requests/{req_id}/status",
+        json={"status": "resolved", "note": "Fixed"},
+        headers={"Authorization": "Bearer dev-token-CHANGE-ME"},
+    )
     assert resp2.status_code == 200
     assert resp2.json()["status"] == "resolved"
 
     # resolved -> in_progress (reopen)
-    resp3 = client.patch(f"/requests/{req_id}/status", json={"status": "in_progress", "note": "Reopen"})
+    resp3 = client.patch(
+        f"/requests/{req_id}/status",
+        json={"status": "in_progress", "note": "Reopen"},
+        headers={"Authorization": "Bearer dev-token-CHANGE-ME"},
+    )
     assert resp3.status_code == 200
     assert resp3.json()["status"] == "in_progress"
 
     # in_progress -> closed
-    resp4 = client.patch(f"/requests/{req_id}/status", json={"status": "closed"})
+    resp4 = client.patch(
+        f"/requests/{req_id}/status",
+        json={"status": "closed"},
+        headers={"Authorization": "Bearer dev-token-CHANGE-ME"},
+    )
     assert resp4.status_code == 200
     assert resp4.json()["status"] == "closed"
 
@@ -160,10 +180,18 @@ def test_invalid_status_transition_returns_http_error(client: TestClient):
     req_id = created["id"]
 
     # Invalid transition: in_progress -> new (need to get to in_progress first)
-    resp1 = client.patch(f"/requests/{req_id}/status", json={"status": "in_progress"})
+    resp1 = client.patch(
+        f"/requests/{req_id}/status",
+        json={"status": "in_progress"},
+        headers={"Authorization": "Bearer dev-token-CHANGE-ME"},
+    )
     assert resp1.status_code == 200
     # Now attempt invalid transition to new
-    resp_bad = client.patch(f"/requests/{req_id}/status", json={"status": "new"})
+    resp_bad = client.patch(
+        f"/requests/{req_id}/status",
+        json={"status": "new"},
+        headers={"Authorization": "Bearer dev-token-CHANGE-ME"},
+    )
     # Business rule maps InvalidTransitionError to HTTP 400
     assert resp_bad.status_code == 400
     detail = resp_bad.json().get("detail", "")
