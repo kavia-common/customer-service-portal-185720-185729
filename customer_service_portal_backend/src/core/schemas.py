@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, date
 from enum import Enum
 from typing import List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 # PUBLIC_INTERFACE
@@ -63,6 +63,10 @@ class ServiceRequestOut(BaseModel):
     status: StatusEnum = Field(..., description="Current status of the request")
     created_at: datetime = Field(..., description="Creation timestamp")
     updated_at: datetime = Field(..., description="Last update timestamp")
+    customer_id: Optional[str] = Field(
+        None,
+        description="Customer identifier associated with the request (optional for in-memory demo)",
+    )
 
 
 # PUBLIC_INTERFACE
@@ -82,6 +86,39 @@ class ServiceRequestListResponse(BaseModel):
     total: int = Field(..., description="Total count of matching records")
     page: int = Field(..., description="Current page")
     page_size: int = Field(..., description="Page size")
+
+
+# PUBLIC_INTERFACE
+class ListRequestFilters(BaseModel):
+    """
+    Validated input model for list filters, pagination, and sorting.
+
+    - Supports optional filters: status, q (free-text), customer_id,
+      created_from/to (date range).
+    - Pagination: page >=1, page_size in [1,100].
+    - Sorting: fixed created_at desc ordering (implicit).
+    """
+    status: Optional[StatusEnum] = Field(None, description="Filter by status")
+    q: Optional[str] = Field(None, description="Free-text search in title/description")
+    customer_id: Optional[str] = Field(None, description="Filter by customer id")
+    created_from: Optional[date] = Field(
+        None,
+        description="Filter records created on/after this date (inclusive, UTC)",
+    )
+    created_to: Optional[date] = Field(
+        None,
+        description="Filter records created on/before this date (inclusive, UTC)",
+    )
+    page: int = Field(1, ge=1, description="Page number (1-indexed)")
+    page_size: int = Field(20, ge=1, le=100, description="Number of items per page")
+
+    @field_validator("created_to")
+    @classmethod
+    def _validate_date_range(cls, v: Optional[date], values: dict):
+        cf: Optional[date] = values.get("created_from")
+        if v is not None and cf is not None and v < cf:
+            raise ValueError("created_to must be on or after created_from")
+        return v
 
 
 # PUBLIC_INTERFACE

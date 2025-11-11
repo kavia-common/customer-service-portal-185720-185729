@@ -24,6 +24,7 @@ class _ServiceRequestEntity:
     status: StatusEnum
     created_at: datetime
     updated_at: datetime
+    customer_id: Optional[str] = None
     history: List[StatusUpdateOut] = field(default_factory=list)
 
 
@@ -51,8 +52,11 @@ class Repository:
         q: Optional[str],
         page: int,
         page_size: int,
+        customer_id: Optional[str] = None,
+        created_from: Optional[datetime] = None,
+        created_to: Optional[datetime] = None,
     ) -> Tuple[List[ServiceRequestListItem], int]:
-        """List requests with simple filtering and pagination. Returns (items, total)."""
+        """List requests with filtering and pagination. Returns (items, total)."""
         raise NotImplementedError
 
     def get_history(self, request_id: str) -> Optional[List[StatusUpdateOut]]:
@@ -83,6 +87,7 @@ class InMemoryRepository(Repository):
                 status=StatusEnum.new,
                 created_at=now,
                 updated_at=now,
+                customer_id=None,
                 history=[StatusUpdateOut(status=StatusEnum.new, note=None, at=now)],
             )
             self._store[request_id] = entity
@@ -112,6 +117,9 @@ class InMemoryRepository(Repository):
         q: Optional[str],
         page: int,
         page_size: int,
+        customer_id: Optional[str] = None,
+        created_from: Optional[datetime] = None,
+        created_to: Optional[datetime] = None,
     ) -> Tuple[List[ServiceRequestListItem], int]:
         with self._lock:
             items = list(self._store.values())
@@ -129,6 +137,17 @@ class InMemoryRepository(Repository):
                     if q_lower in e.title.lower()
                     or (e.description or "").lower().find(q_lower) != -1
                 ]
+
+            # Filter by customer_id
+            if customer_id:
+                items = [e for e in items if e.customer_id == customer_id]
+
+            # Date range filter on created_at (inclusive)
+            if created_from is not None:
+                items = [e for e in items if e.created_at >= created_from]
+            if created_to is not None:
+                # inclusive to the end of the 'created_to' day if a date was given at midnight
+                items = [e for e in items if e.created_at <= created_to]
 
             # Sort by created_at desc for deterministic order
             items.sort(key=lambda e: e.created_at, reverse=True)
@@ -159,4 +178,5 @@ class InMemoryRepository(Repository):
             status=entity.status,
             created_at=entity.created_at,
             updated_at=entity.updated_at,
+            customer_id=entity.customer_id,
         )

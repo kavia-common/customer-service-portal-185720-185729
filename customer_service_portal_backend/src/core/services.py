@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import List, Optional, Tuple
+from datetime import datetime, date
 
 from .errors import (
     NotFoundError,
@@ -42,10 +43,32 @@ class RequestService:
 
     # PUBLIC_INTERFACE
     def list(
-        self, status: Optional[StatusEnum], q: Optional[str], page: int, page_size: int
+        self,
+        status: Optional[StatusEnum],
+        q: Optional[str],
+        page: int,
+        page_size: int,
+        customer_id: Optional[str] = None,
+        created_from: Optional[date] = None,
+        created_to: Optional[date] = None,
     ) -> Tuple[List[ServiceRequestListItem], int]:
         """List requests supporting filters and pagination."""
-        return self.repo.list_requests(status=status, q=q, page=page, page_size=page_size)
+        # Convert date-only to datetime range endpoints (UTC at start/end of day).
+        dt_from: Optional[datetime] = (
+            datetime.combine(created_from, datetime.min.time()) if created_from else None
+        )
+        dt_to: Optional[datetime] = (
+            datetime.combine(created_to, datetime.max.time()) if created_to else None
+        )
+        return self.repo.list_requests(
+            status=status,
+            q=q,
+            page=page,
+            page_size=page_size,
+            customer_id=customer_id,
+            created_from=dt_from,
+            created_to=dt_to,
+        )
 
     # PUBLIC_INTERFACE
     def update_status(

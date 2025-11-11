@@ -1,4 +1,5 @@
 from typing import Optional
+from datetime import date
 
 from fastapi import APIRouter, Path, Query, status, Depends
 
@@ -117,7 +118,8 @@ async def update_request_status(
     response_model=ServiceRequestListResponse,
     summary="List service requests",
     description=(
-        "List service requests with optional filtering and pagination."
+        "List service requests with optional filtering and pagination. "
+        "Results are ordered by created_at descending."
     ),
     responses={
         200: {"description": "List of service requests"},
@@ -125,7 +127,10 @@ async def update_request_status(
 )
 async def list_requests(
     status: Optional[StatusEnum] = Query(None, description="Optional status filter"),
-    q: Optional[str] = Query(None, description="Optional free-text search"),
+    q: Optional[str] = Query(None, description="Optional free-text search (title/description)"),
+    customer_id: Optional[str] = Query(None, description="Filter by customer id"),
+    created_from: Optional[date] = Query(None, description="Include requests created on/after this date (YYYY-MM-DD)"),
+    created_to: Optional[date] = Query(None, description="Include requests created on/before this date (YYYY-MM-DD)"),
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=100, description="Page size"),
     svc: RequestService = Depends(get_service),
@@ -133,8 +138,22 @@ async def list_requests(
     """
     List service requests with filters and pagination.
     """
+    # Input validation: ensure created_to not before created_from
+    if created_from and created_to and created_to < created_from:
+        # Consistent with FastAPI validation error shape for clarity
+        from fastapi import HTTPException
+        raise HTTPException(status_code=422, detail="created_to must be on or after created_from")
+
     try:
-        items, total = svc.list(status=status, q=q, page=page, page_size=page_size)
+        items, total = svc.list(
+            status=status,
+            q=q,
+            page=page,
+            page_size=page_size,
+            customer_id=customer_id,
+            created_from=created_from,
+            created_to=created_to,
+        )
         return ServiceRequestListResponse(
             items=items, total=total, page=page, page_size=page_size
         )
