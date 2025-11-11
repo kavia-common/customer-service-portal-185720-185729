@@ -32,14 +32,19 @@ Implemented endpoints:
 - GET /requests/{id}/history
   - Retrieve the chronological status update history for a request
 
-Health endpoint:
+Health and docs:
 - GET /
   - Returns {"message": "Healthy"}
+- GET /docs/help
+  - Returns pointers to Swagger UI (/docs), ReDoc (/redoc), and the OpenAPI JSON (/openapi.json)
 
 Run the API locally:
 - Using uvicorn (dev): uvicorn customer_service_portal_backend.src.api.main:app --reload --port 3001
 
+OpenAPI and documentation:
+- The runtime-generated /openapi.json served by the FastAPI app is the authoritative source of the API specification.
+- Interactive docs: /docs (Swagger UI) and /redoc.
+- A static file at customer_service_portal_backend/interfaces/openapi.json exists as a stub and may lag behind the live OpenAPI schema.
+
 Notes:
 - Data persistence is in-memory and process-local, implemented via a thread-safe repository (RLock).
-- The runtime /openapi.json served by the FastAPI app is the source of truth.
-- The static interfaces/openapi.json file is a stub.

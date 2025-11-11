@@ -39,8 +39,12 @@ def get_service() -> RequestService:
     status_code=status.HTTP_201_CREATED,
     summary="Create a new service request",
     description="Create a new customer service request.",
+    operation_id="create_request",
     responses={
-        201: {"description": "Service request created"},
+        201: {
+            "description": "Service request created",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ServiceRequestOut"}}},
+        },
         400: {"description": "Validation error"},
     },
 )
@@ -68,8 +72,12 @@ async def create_request(
     response_model=ServiceRequestOut,
     summary="Get a service request by ID",
     description="Retrieve a single service request by its identifier.",
+    operation_id="get_request_by_id",
     responses={
-        200: {"description": "Service request found"},
+        200: {
+            "description": "Service request found",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ServiceRequestOut"}}},
+        },
         404: {"description": "Service request not found"},
     },
 )
@@ -92,8 +100,12 @@ async def get_request(
     response_model=ServiceRequestOut,
     summary="Update the status of a service request",
     description="Update the status of an existing service request and return the updated entity.",
+    operation_id="update_request_status",
     responses={
-        200: {"description": "Status updated"},
+        200: {
+            "description": "Status updated",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ServiceRequestOut"}}},
+        },
         400: {"description": "Invalid status transition"},
         404: {"description": "Service request not found"},
     },
@@ -121,8 +133,12 @@ async def update_request_status(
         "List service requests with optional filtering and pagination. "
         "Results are ordered by created_at descending."
     ),
+    operation_id="list_requests",
     responses={
-        200: {"description": "List of service requests"},
+        200: {
+            "description": "List of service requests",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ServiceRequestListResponse"}}},
+        },
     },
 )
 async def list_requests(
@@ -137,6 +153,17 @@ async def list_requests(
 ) -> ServiceRequestListResponse:
     """
     List service requests with filters and pagination.
+
+    Parameters:
+        status: Optional status filter.
+        q: Optional free-text search in title/description.
+        customer_id: Filter by customer id.
+        created_from: Include requests created on/after this date (YYYY-MM-DD).
+        created_to: Include requests created on/before this date (YYYY-MM-DD).
+        page: Page number (1-indexed).
+        page_size: Page size (1-100).
+    Returns:
+        ServiceRequestListResponse: Items and pagination metadata.
     """
     # Input validation: ensure created_to not before created_from
     if created_from and created_to and created_to < created_from:
@@ -167,8 +194,12 @@ async def list_requests(
     response_model=ServiceRequestHistoryResponse,
     summary="Get the status change history for a service request",
     description="Retrieve the chronological history of status updates for a given request.",
+    operation_id="get_request_history",
     responses={
-        200: {"description": "History retrieved"},
+        200: {
+            "description": "History retrieved",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ServiceRequestHistoryResponse"}}},
+        },
         404: {"description": "Service request not found"},
     },
 )
