@@ -131,7 +131,8 @@ class ListRequestFilters(BaseModel):
     """
     status: Optional[StatusEnum] = Field(None, description="Filter by status")
     q: Optional[constr(min_length=1, max_length=256)] = Field(
-        None, description="Free-text search in title/description (1-256 chars if provided)"
+        None,
+        description="Case-insensitive substring search across title and description (1-256 chars if provided)",
     )
     customer_id: Optional[Annotated[str, Field(pattern=r"^[A-Za-z0-9_-]{3,64}$")]] = Field(
         None, description="Filter by customer id (3-64, A-Za-z0-9_-)"

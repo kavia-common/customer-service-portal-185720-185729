@@ -137,9 +137,10 @@ async def update_request_status(
 @router.get(
     "",
     response_model=ServiceRequestListResponse,
-    summary="List service requests",
+    summary="List service requests (supports search with 'q')",
     description=(
         "List service requests with optional filtering and pagination. "
+        "Supports case-insensitive substring search across title and description via the 'q' parameter. "
         "Results are ordered by created_at descending."
     ),
     operation_id="list_requests",
@@ -154,7 +155,10 @@ async def update_request_status(
 )
 async def list_requests(
     status: Optional[StatusEnum] = Query(None, description="Optional status filter"),
-    q: Optional[str] = Query(None, description="Optional free-text search (title/description)"),
+    q: Optional[str] = Query(
+        None,
+        description="Optional case-insensitive substring search across title and description",
+    ),
     customer_id: Optional[str] = Query(None, description="Filter by customer id"),
     created_from: Optional[date] = Query(None, description="Include requests created on/after this date (YYYY-MM-DD)"),
     created_to: Optional[date] = Query(None, description="Include requests created on/before this date (YYYY-MM-DD)"),

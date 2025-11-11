@@ -128,14 +128,14 @@ class InMemoryRepository(Repository):
             if status is not None:
                 items = [e for e in items if e.status == status]
 
-            # Simple text search in title/description
+            # Case-insensitive substring search in title and description when q is provided
             if q:
                 q_lower = q.lower()
                 items = [
                     e
                     for e in items
                     if q_lower in e.title.lower()
-                    or (e.description or "").lower().find(q_lower) != -1
+                    or q_lower in (e.description or "").lower()
                 ]
 
             # Filter by customer_id
