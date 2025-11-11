@@ -74,6 +74,12 @@ Requests:
   - List service requests with optional filters (status, q, customer_id, created_from, created_to) and pagination (page, page_size).
 - GET /requests/{id}/history
   - Retrieve the chronological status update history for a request.
+- POST /requests/{id}/attachments
+  - Multipart upload (field "file"). Stores file on disk under ./attachments/{id}/ with in-memory metadata.
+- GET /requests/{id}/attachments
+  - List attachment metadata for a request.
+- GET /requests/{id}/attachments/{attachment_id}
+  - Download attachment content (streams file). Returns correct content type and filename.
 
 For precise request/response schemas and examples, refer to the live OpenAPI at /openapi.json or the interactive docs.
 
@@ -150,4 +156,5 @@ Common codes:
 ## Notes
 
 - Data persistence is in-memory and process-local, implemented via a thread-safe repository (RLock).
+- Attachments are stored under ./attachments in the repo root with metadata kept in-memory; all data is ephemeral and cleared when the process restarts. Defaults: 10MB max per file; allowed content types: image/*, text/*, application/pdf.
 - CORS is permissive for development; tighten configuration before production.

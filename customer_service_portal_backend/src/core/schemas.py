@@ -176,3 +176,28 @@ class ServiceRequestHistoryResponse(BaseModel):
     history: List[ServiceRequestHistoryEntry] = Field(
         default_factory=list, description="Chronological list of status updates"
     )
+
+
+# PUBLIC_INTERFACE
+class AttachmentMeta(BaseModel):
+    """Metadata describing an uploaded attachment file."""
+    id: str = Field(..., description="Attachment identifier")
+    filename: str = Field(..., description="Original filename")
+    content_type: str = Field(..., description="MIME content type")
+    size_bytes: int = Field(..., ge=0, description="File size in bytes")
+    uploaded_at: datetime = Field(..., description="Upload timestamp (UTC)")
+
+
+# PUBLIC_INTERFACE
+class AttachmentListResponse(BaseModel):
+    """List response for attachments associated with a service request."""
+    request_id: str = Field(..., description="Parent request identifier")
+    items: List[AttachmentMeta] = Field(default_factory=list, description="Attachments for the request")
+    total: int = Field(..., description="Total number of attachments")
+
+
+# PUBLIC_INTERFACE
+class AttachmentUploadResponse(BaseModel):
+    """Response returned after a successful upload."""
+    request_id: str = Field(..., description="Parent request identifier")
+    attachment: AttachmentMeta = Field(..., description="Stored attachment metadata")

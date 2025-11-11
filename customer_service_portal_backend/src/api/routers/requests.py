@@ -1,7 +1,8 @@
 from typing import Optional
 from datetime import date
 
-from fastapi import APIRouter, Path, Query, status, Depends
+from fastapi import APIRouter, Path, Query, status, Depends, UploadFile, File
+from fastapi.responses import FileResponse, JSONResponse
 
 from ...core.schemas import (
     ServiceRequestCreate,
@@ -12,10 +13,13 @@ from ...core.schemas import (
     StatusEnum,
     ListRequestFilters,
     ErrorResponse,
+    AttachmentListResponse,
+    AttachmentUploadResponse,
 )
-from ...core.errors import DomainError, to_http_exception
+from ...core.errors import DomainError, to_http_exception, NotFoundError
 from ...core.repository import InMemoryRepository
 from ...core.services import RequestService
+from ...core.attachments import AttachmentStore
 
 router = APIRouter()
 
@@ -32,6 +36,19 @@ def get_service() -> RequestService:
     except NameError:
         _repo_singleton = InMemoryRepository()  # type: ignore[assignment]
     return RequestService(_repo_singleton)  # type: ignore[name-defined]
+
+
+def get_attachment_store() -> AttachmentStore:
+    """
+    Dependency provider for AttachmentStore.
+    Provides a process-local store with filesystem-backed content.
+    """
+    global _att_store_singleton
+    try:
+        _att_store_singleton  # type: ignore[name-defined]
+    except NameError:
+        _att_store_singleton = AttachmentStore()  # type: ignore[assignment]
+    return _att_store_singleton  # type: ignore[name-defined]
 
 
 # PUBLIC_INTERFACE
@@ -230,3 +247,144 @@ async def get_request_history(
         return svc.history(id)
     except DomainError as e:
         raise to_http_exception(e) from e
+
+
+# PUBLIC_INTERFACE
+@router.post(
+    "/{id}/attachments",
+    response_model=AttachmentUploadResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Upload an attachment for a request",
+    description=(
+        "Upload a file and associate it with the specified service request. "
+        "Accepts multipart/form-data with a single 'file' field. "
+        "Content type must be supported and file size within limits."
+    ),
+    operation_id="upload_request_attachment",
+    responses={
+        201: {"description": "Attachment uploaded"},
+        400: {"description": "Validation error", "model": ErrorResponse},
+        404: {"description": "Service request not found", "model": ErrorResponse},
+        415: {"description": "Unsupported media type", "model": ErrorResponse},
+        413: {"description": "Payload too large", "model": ErrorResponse},
+        500: {"description": "Internal error", "model": ErrorResponse},
+    },
+)
+async def upload_attachment(
+    id: str = Path(..., description="The unique identifier of the service request"),
+    file: UploadFile = File(..., description="File to upload"),
+    svc: RequestService = Depends(get_service),
+    store: AttachmentStore = Depends(get_attachment_store),
+) -> AttachmentUploadResponse:
+    """
+    Upload an attachment for a given service request.
+
+    Validates that the request exists before accepting the file.
+    Enforces basic size and type validation.
+    """
+    # Ensure request exists
+    try:
+        _ = svc.get(id)
+    except DomainError as e:
+        raise to_http_exception(e) from e
+
+    try:
+        content = await file.read()
+        content_type = file.content_type or ""
+        meta = store.add(id, file.filename, content_type, content)
+        return AttachmentUploadResponse(request_id=id, attachment=meta)
+    except ValueError as ve:
+        msg = str(ve)
+        code = "validation_error"
+        # Map to 415 for unsupported type, 413 for too large, else 400
+        if "Unsupported content type" in msg:
+            status_code = status.HTTP_415_UNSUPPORTED_MEDIA_TYPE
+        elif "too large" in msg:
+            status_code = status.HTTP_413_REQUEST_ENTITY_TOO_LARGE
+        else:
+            status_code = status.HTTP_400_BAD_REQUEST
+        return JSONResponse(
+            status_code=status_code,
+            content={"error": {"code": code, "message": msg, "details": {}}},
+        )
+    except DomainError as e:
+        raise to_http_exception(e) from e
+    except Exception:
+        # generic failure
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={"error": {"code": "internal_error", "message": "Failed to upload file", "details": {}}},
+        )
+
+
+# PUBLIC_INTERFACE
+@router.get(
+    "/{id}/attachments",
+    response_model=AttachmentListResponse,
+    summary="List attachments for a request",
+    description="Return metadata for all attachments associated with the specified request.",
+    operation_id="list_request_attachments",
+    responses={
+        200: {"description": "List of attachments"},
+        404: {"description": "Service request not found", "model": ErrorResponse},
+        500: {"description": "Internal error", "model": ErrorResponse},
+    },
+)
+async def list_attachments(
+    id: str = Path(..., description="The unique identifier of the service request"),
+    svc: RequestService = Depends(get_service),
+    store: AttachmentStore = Depends(get_attachment_store),
+) -> AttachmentListResponse:
+    """
+    List attachments for the specified request.
+    """
+    try:
+        _ = svc.get(id)
+    except DomainError as e:
+        raise to_http_exception(e) from e
+
+    items = store.list(id)
+    return AttachmentListResponse(request_id=id, items=items, total=len(items))
+
+
+# PUBLIC_INTERFACE
+@router.get(
+    "/{id}/attachments/{attachment_id}",
+    summary="Download a request attachment",
+    description="Download the raw file content of a previously uploaded attachment.",
+    operation_id="download_request_attachment",
+    responses={
+        200: {"description": "File content returned"},
+        404: {"description": "Request or attachment not found", "model": ErrorResponse},
+        500: {"description": "Internal error", "model": ErrorResponse},
+    },
+)
+async def download_attachment(
+    id: str = Path(..., description="The unique identifier of the service request"),
+    attachment_id: str = Path(..., description="Attachment identifier"),
+    svc: RequestService = Depends(get_service),
+    store: AttachmentStore = Depends(get_attachment_store),
+):
+    """
+    Download an attachment file.
+    """
+    try:
+        _ = svc.get(id)
+    except DomainError as e:
+        raise to_http_exception(e) from e
+
+    try:
+        path, entity = store.get_file(id, attachment_id)
+        # Use FileResponse to stream file with correct headers
+        return FileResponse(
+            path,
+            media_type=entity.content_type,
+            filename=entity.filename,
+        )
+    except NotFoundError as nf:
+        raise to_http_exception(nf) from nf
+    except Exception:
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={"error": {"code": "internal_error", "message": "Failed to download file", "details": {}}},
+        )
