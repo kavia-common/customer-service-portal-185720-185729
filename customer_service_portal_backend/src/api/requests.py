@@ -230,7 +230,7 @@ def delete_request(
     Parameters:
       - request_id: integer ID
     Returns:
-      - None (204)
+      - No Content (204) with an empty body.
     """
     # Enforce staff role for destructive action
     require_staff(principal)
@@ -246,5 +246,5 @@ def delete_request(
         from ..core.errors import NotFoundError
 
         raise NotFoundError(f"Service request {request_id} not found", code="REQUEST_NOT_FOUND")
-    # Return explicit empty response for 204 No Content
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    # Explicitly return an empty 204 response (no body)
+    return Response(status_code=status.HTTP_204_NO_CONTENT, content=None)
