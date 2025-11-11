@@ -4,7 +4,8 @@ from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, Path, Query, status
 
-from ..core.dependencies import get_api_key, get_repo
+from ..core.dependencies import get_repo
+from ..core.auth import get_principal, require_customer, require_staff, Principal
 from ..models import (
     RequestEventRead,
     RequestStatus,
@@ -45,7 +46,7 @@ def _service(repo: Repository) -> ServiceRequestService:
 def create_request(
     payload: ServiceRequestCreate,
     repo: Repository = Depends(get_repo),
-    _: str = Depends(get_api_key),
+    principal: Principal | None = Depends(get_principal),
 ) -> ServiceRequestRead:
     """
     Create a new service request.
@@ -55,6 +56,9 @@ def create_request(
     Returns:
       - ServiceRequestRead representing the created request
     """
+    # Enforce customer role when auth is enabled
+    require_customer(principal)
+
     svc = _service(repo)
     return svc.create(payload)
 
@@ -78,7 +82,7 @@ def list_requests(
     limit: int = Query(default=20, ge=1, le=100, description="Maximum number of items to return"),
     offset: int = Query(default=0, ge=0, description="Number of items to skip"),
     repo: Repository = Depends(get_repo),
-    _: str = Depends(get_api_key),
+    principal: Principal | None = Depends(get_principal),
 ) -> Dict[str, Any]:
     """
     List service requests with filters/pagination.
@@ -88,6 +92,9 @@ def list_requests(
       - items: list of ServiceRequestRead
       - limit, offset: pagination echo
     """
+    # Enforce staff role for listing when auth is enabled
+    require_staff(principal)
+
     # Build a ServiceRequestListFilters instance. Pydantic will coerce where possible.
     filters = ServiceRequestListFilters(
         status=status_filter,
@@ -122,7 +129,7 @@ def list_requests(
 def get_request_by_id(
     request_id: int = Path(..., ge=1, description="Service request ID"),
     repo: Repository = Depends(get_repo),
-    _: str = Depends(get_api_key),
+    principal: Principal | None = Depends(get_principal),
 ) -> ServiceRequestRead:
     """
     Get a service request by ID.
@@ -132,6 +139,8 @@ def get_request_by_id(
     Returns:
       - ServiceRequestRead
     """
+    require_staff(principal)
+
     svc = _service(repo)
     return svc.get(request_id)
 
@@ -152,7 +161,7 @@ def update_request_status(
     request_id: int = Path(..., ge=1, description="Service request ID"),
     payload: ServiceRequestUpdateStatus = ...,
     repo: Repository = Depends(get_repo),
-    _: str = Depends(get_api_key),
+    principal: Principal | None = Depends(get_principal),
 ) -> ServiceRequestRead:
     """
     Update a service request's status and record an event.
@@ -163,6 +172,8 @@ def update_request_status(
     Returns:
       - Updated ServiceRequestRead
     """
+    require_staff(principal)
+
     svc = _service(repo)
     return svc.update_status(request_id, payload)
 
@@ -181,7 +192,7 @@ def update_request_status(
 def get_request_history(
     request_id: int = Path(..., ge=1, description="Service request ID"),
     repo: Repository = Depends(get_repo),
-    _: str = Depends(get_api_key),
+    principal: Principal | None = Depends(get_principal),
 ) -> list[RequestEventRead]:
     """
     Get events history for a service request.
@@ -191,6 +202,8 @@ def get_request_history(
     Returns:
       - List of RequestEventRead
     """
+    require_staff(principal)
+
     svc = _service(repo)
     return svc.history(request_id)
 
@@ -209,7 +222,7 @@ def get_request_history(
 def delete_request(
     request_id: int = Path(..., ge=1, description="Service request ID"),
     repo: Repository = Depends(get_repo),
-    _: str = Depends(get_api_key),
+    principal: Principal | None = Depends(get_principal),
 ) -> None:
     """
     Delete a service request.
@@ -219,6 +232,9 @@ def delete_request(
     Returns:
       - None (204)
     """
+    # Enforce staff role for destructive action
+    require_staff(principal)
+
     # Use repository directly via service to keep consistency on NotFound handling
     svc = _service(repo)
     # Reuse get to raise NotFound for unknown IDs

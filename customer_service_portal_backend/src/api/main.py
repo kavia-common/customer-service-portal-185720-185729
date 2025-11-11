@@ -6,6 +6,7 @@ import logging
 
 from ..core.config import get_settings
 from ..core.errors import register_exception_handlers
+from ..core.auth import AuthError, auth_exception_response
 from ..persistence import get_repository
 from .requests import router as requests_router
 
@@ -56,6 +57,11 @@ app.add_middleware(RequestIDMiddleware)
 
 # Register centralized exception handlers for domain errors
 register_exception_handlers(app)
+
+# Register auth error handler for unified 401/403 responses
+@app.exception_handler(AuthError)
+async def _handle_auth_error(_: Request, exc: AuthError):
+    return auth_exception_response(exc)
 
 # Include API routers
 app.include_router(requests_router)
